@@ -13,7 +13,7 @@ import database
 
 # Инициализация бота
 load_dotenv()
-ADMIN_ID = int(os.getenv('ADMIN_ID'))
+ADMIN_ID = int(os.getenv('ADMIN_ID', '0'))
 proxy_url = 'http://proxy.server:3128'
 session = AiohttpSession(proxy=proxy_url)
 bot = Bot(token=TOKEN, session=session)
