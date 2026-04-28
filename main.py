@@ -9,7 +9,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeybo
 from config import TOKEN
 import database
 
-
+x = 1
 
 # Инициализация бота
 load_dotenv()
