@@ -1,4 +1,4 @@
-import shutil
+import os
 import psutil
 import asyncio
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -13,33 +13,54 @@ ADMIN_ID = 1658835498
 
 # Инициализация бота
 load_dotenv()
-session = AiohttpSession(proxy="http://proxy.server:3128")
+proxy_url = 'http://proxy.server:3128'
+session = AiohttpSession(proxy=proxy_url)
 bot = Bot(token=TOKEN, session=session)
 dp = Dispatcher()
 database.init_db()
 
 # ~~~ АДМИН КОМАНДЫ ~~~
+def get_disk_info():
+    quota_mb = 512.0
+
+    total_size = 0
+
+    root_directory = '/home/tr1ck7/'
+
+    for dirpath, dirnames, filenames in os.walk(root_directory):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            if not os.path.islink(fp):
+                try:
+                    total_size += os.path.getsize(fp)
+                except OSError:
+                    continue
+
+    used_mb = total_size / (1024 * 1024)
+    percent = (used_mb / quota_mb) * 100
+    free_mb = quota_mb - used_mb
+
+    return f'{percent:.1f}% занято (Свободно: {free_mb:.1f} MB)'
+
+
 @dp.message(Command('status'))
 async def cmd_status(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
-        return
+    disk_stat = get_disk_info()
 
-    total, used, free = shutil.disk_usage('/')
-    disk_percent = (used / total) * 100
+    cpu_usage = psutil.cpu_percent(interval = None)
+    ram_usage = psutil.virtual_memory().percent
 
-    mem = psutil.virtual_memory()
-
-    text = (
-        "🛠 **Панель управления сервером**\n\n"
-        f"💾 **Диск:** {disk_percent:.1f}% занято\n"
-        f"   (Свободно: {free // (1024 * 1024)} MB)\n"
-        f"⚡ **RAM:** {mem.percent}%\n"
-        f"👤 **Твой ID:** `{message.from_user.id}`\n\n"
-        "✅ Бот работает через прокси\n"
-        "🚀 Статус: Online"
+    status_text = (
+        '🛠 **Панель управления сервером**\n\n'
+        f'💾 **Диск:** {disk_stat}\n'
+        f'🖥 Процессор: {cpu_usage}%\n'
+        f'⚡ **RAM:** {ram_usage}%\n'
+        f'👤 **Твой ID:** `{message.from_user.id}`\n\n'
+        '✅ Бот работает через прокси\n'
+        '🚀 Статус: Online'
     )
 
-    await message.answer(text, parse_mode = 'Markdown')
+    await message.answer(status_text, parse_mode = 'Markdown')
 
 
 # Текст для главного меню
