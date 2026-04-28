@@ -44,6 +44,10 @@ def get_disk_info():
 
 @dp.message(Command('status'))
 async def cmd_status(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+
     disk_stat = get_disk_info()
 
     cpu_usage = psutil.cpu_percent(interval = None)
