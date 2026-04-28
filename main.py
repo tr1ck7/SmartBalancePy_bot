@@ -9,10 +9,11 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeybo
 from config import TOKEN
 import database
 
-ADMIN_ID = 1658835498
+
 
 # Инициализация бота
 load_dotenv()
+ADMIN_ID = int(os.getenv('ADMIN_ID'))
 proxy_url = 'http://proxy.server:3128'
 session = AiohttpSession(proxy=proxy_url)
 bot = Bot(token=TOKEN, session=session)
