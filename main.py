@@ -23,9 +23,7 @@ database.init_db()
 # ~~~ АДМИН КОМАНДЫ ~~~
 def get_disk_info():
     quota_mb = 512.0
-
     total_size = 0
-
     root_directory = '/home/tr1ck7/'
 
     for dirpath, dirnames, filenames in os.walk(root_directory):
@@ -37,7 +35,7 @@ def get_disk_info():
                 except OSError:
                     continue
 
-    used_mb = total_size / (1024 * 1024)
+    used_mb = (total_size / (1024 * 1024)) + 48.5
     percent = (used_mb / quota_mb) * 100
     free_mb = quota_mb - used_mb
 
