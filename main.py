@@ -78,10 +78,20 @@ async def cmd_status(message: types.Message):
 
 async def update_pinned_message(user_id):
     total_expenses = get_total_expenses(user_id)
+    limit = database.get_monthly_limit(user_id)
+
+    if limit > 0:
+        remaining = limit - total_expenses
+        if remaining >= 0:
+            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено: {total_expenses:.0f} руб.\n✅ Остаток: {remaining:.0f} руб.'
+        else:
+            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено: {total_expenses:.0f} руб.\n⛔ Перерасход: {abs(remaining):.0f} руб.'
+    else:
+        limit_line = f'📉 Потрачено всего: {total_expenses:.0f} руб.\n💡 Лимит не установлен'
 
     text_pin = (
         '📊 ТЕКУЩИЙ БАЛАНС И СТАТИСТИКА\n\n'
-        f'📉 Всего потрачено: {total_expenses} руб.\n'
+        f'{limit_line}\n'
         '\n🔄 Обновлено только что'
     )
 
@@ -235,6 +245,7 @@ async def final_delete(callback: types.CallbackQuery):
     database.delete_expense(exp_id)
     await callback.answer('Запись удалена')
     await callback.message.edit_text('✅ Запись успешно удалена')
+    await update_pinned_message(callback.from_user.id)
 
 
 @dp.callback_query(F.data == 'cancel_del')
