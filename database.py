@@ -48,13 +48,16 @@ def add_expense(user_id, amount, category):
     conn.close()
 
 
-def get_total_expenses(user_id):
+def get_total_expenses(user_id, since_date = None):
     conn = sqlite3.connect('finance.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT SUM(amount) FROM expenses WHERE user_id = ?', (user_id,))
+    if since_date:
+        cursor.execute('SELECT SUM(amount) FROM expenses WHERE user_id = ? AND date >= ?', (user_id, since_date))
+    else:
+        cursor.execute('SELECT SUM(amount) FROM expenses WHERE user_id = ?', (user_id,))
     total = cursor.fetchone()[0]
     conn.close()
-    return total or 0.0
+    return total if total else  0
 
 
 def set_limit_with_period(user_id, limit_amount, days):

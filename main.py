@@ -79,22 +79,28 @@ async def cmd_status(message: types.Message):
 # ~~~ ЗАКРЕП ~~~
 
 async def update_pinned_message(user_id):
-    total_expenses = get_total_expenses(user_id)
+    total_all_time = database.get_total_expenses(user_id)
     limit, limit_days, limit_start = database.get_limit_info(user_id)
 
     if limit > 0:
-        remaining = limit - total_expenses
+        if limit_start:
+            expenses_for_limit = database.get_total_expenses(user_id, since_date = limit_start)
+        else:
+            expenses_for_limit = total_all_time
+        remaining = limit - expenses_for_limit
         days_left = get_days_left(limit_start, limit_days)
         days_str = f'⏳ Осталось дней: {days_left}\n' if days_left is not None else ''
+
         if remaining >= 0:
-            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено: {total_expenses:.0f} руб.\n✅ Остаток: {remaining:.0f} руб.\n{days_str}'
+            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено по лимиту: {expenses_for_limit:.0f} руб.\n✅ Остаток: {remaining:.0f} руб.\n{days_str}'
         else:
-            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено: {total_expenses:.0f} руб.\n⛔ Перерасход: {abs(remaining):.0f} руб.\n{days_str}'
+            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено по лимиту: {expenses_for_limit:.0f} руб.\n⛔ Перерасход: {abs(remaining):.0f} руб.\n{days_str}'
     else:
-        limit_line = f'📉 Потрачено всего: {total_expenses:.0f} руб.\n💡 Лимит не установлен'
+        limit_line = '💡 Лимит не установлен'
 
     text_pin = (
         '📊 ТЕКУЩИЙ БАЛАНС И СТАТИСТИКА\n\n'
+        f'🛍 Общий расход за всё время: {total_all_time:.0f} руб.\n'
         f'{limit_line}\n'
         '\n🔄 Обновлено только что'
     )
@@ -230,11 +236,11 @@ async def set_limit_handler(message: types.Message, state: FSMContext):
     await ask_limit_amount(message, state)
 
 @dp.callback_query(F.data == 'set_limit_pin')
-async def set_limit_from_pin(callback, state):
+async def set_limit_from_pin(callback: types.CallbackQuery, state: FSMContext):
     await ask_limit_amount(callback, state)
 
 @dp.callback_query(F.data == 'change_limit')
-async def change_limit(callback, state):
+async def change_limit(callback: types.CallbackQuery, state: FSMContext):
     await ask_limit_amount(callback, state)
 
 @dp.message(LimitForm.waiting_for_limit)
@@ -336,11 +342,13 @@ async def message_handler(message: types.Message):
 
         database.add_expense(message.from_user.id, amount, category)
 
-        # Проверка лимита
         limit, limit_days, limit_start = database.get_limit_info(message.from_user.id)
         if limit > 0:
-            total = database.get_total_expenses(message.from_user.id)
-            remaining = limit - total
+            if limit_start:
+                total_for_limit = database.get_total_expenses(message.from_user.id, since_date = limit_start)
+            else:
+                total_for_limit = database.get_total_expenses(message.from_user.id)
+            remaining = limit - total_for_limit
             if remaining < 0:
                 limit_text = f'\n\n⛔ <b>Лимит превышен!</b> Перерасход: <code>{abs(remaining):.0f}</code> руб.'
             else:
