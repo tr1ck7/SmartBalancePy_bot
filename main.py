@@ -165,8 +165,7 @@ main_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text='🏠 Главное меню')],
         [KeyboardButton(text='💰 Установить лимит')],
-        [KeyboardButton(text='⏱ История')],
-        [KeyboardButton(text='📊 Статистика')],
+        [KeyboardButton(text='⏱ История'), KeyboardButton(text='📊 Статистика')],
         [KeyboardButton(text='❌ Удалить ошибочную запись')],
         [KeyboardButton(text='⚙ Помощь')]
     ],
@@ -208,43 +207,6 @@ async def help_handler(message: types.Message):
 
 
 # ~~~ ЛИМИТ ~~~
-
-@dp.message(F.text == '💰 Установить лимит')
-async def set_limit_handler(message: types.Message, state: FSMContext):
-    await state.set_state(LimitForm.waiting_for_limit)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='❌ Отмена', callback_data='cancel_limit')]
-    ])
-    await message.answer(
-        '💰 Введи сумму лимита в рублях:\n<i>Например: <code>15000</code></i>',
-        parse_mode='HTML',
-        reply_markup=kb
-    )
-
-
-@dp.callback_query(F.data == 'cancel_limit')
-async def cancel_limit(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
-    await callback.message.edit_text('Установка лимита отменена 🤝')
-
-
-@dp.message(LimitForm.waiting_for_limit)
-async def process_limit(message: types.Message, state: FSMContext):
-    try:
-        limit = float(message.text.replace(',', '.'))
-        if limit <= 0:
-            await message.answer('⚠ Лимит должен быть больше нуля. Попробуй ещё раз:')
-            return
-        database.update_monthly_limit(message.from_user.id, limit)
-        await state.clear()
-        await message.answer(
-            f'✅ Лимит установлен: <code>{limit:.0f}</code> руб.\n'
-            f'Теперь я буду показывать остаток после каждой траты.',
-            parse_mode='HTML'
-        )
-    except ValueError:
-        await message.answer('⚠ Введи просто число, например: <code>15000</code>', parse_mode='HTML')
-
 def limit_days_keyboard():
     return InlineKeyboardMarkup(inline_keyboard = [
         [
@@ -265,7 +227,7 @@ async def ask_limit_amount(message_or_callback, state):
         await message_or_callback.message.edit_text(text, parse_mode = 'HTML', reply_markup = kb)
 
 @dp.message(F.text == '💰 Установить лимит')
-async def set_limit_handler(message, state):
+async def set_limit_handler(message: types.Message, state: FSMContext):
     await ask_limit_amount(message, state)
 
 @dp.callback_query(F.data == 'set_limit_pin')
@@ -277,7 +239,7 @@ async def change_limit(callback, state):
     await ask_limit_amount(callback, state)
 
 @dp.message(LimitForm.waiting_for_limit)
-async def process_limit_amount(message, state):
+async def process_limit_amount(message: types.Message, state: FSMContext):
     try:
         limit = float(message.text.replace(',', '.'))
         if limit <= 0:
@@ -290,7 +252,7 @@ async def process_limit_amount(message, state):
         await message.answer('⚠ Введи просто число, например: <code>15000</code>', parse_mode = 'HTML')
 
 @dp.callback_query(F.data.startswith('days_'))
-async def process_limit_days(callback, state):
+async def process_limit_days(callback: types.CallbackQuery, state: FSMContext):
     if await state.get_state() != LimitForm.waiting_for_days:
         return
     days = int(callback.data.split('_')[1])
