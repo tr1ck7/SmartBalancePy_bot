@@ -140,6 +140,32 @@ def get_days_left(limit_start_str, limit_days):
     delta = end - now
     return max(0, delta.days)
 
+def get_history_pagination(expenses, page: int):
+    items_per_page = 10
+    total_pages = (len(expenses) + items_per_page - 1) // items_per_page
+
+    start_idx = page * items_per_page
+    end_idx = start_idx + items_per_page
+    page_data = expenses[start_idx:end_idx]
+
+    text = f'<b>⏱ История трат (Страница {page + 1} из {total_pages})</b>\n\n'
+
+    for idx, (_, amount, category, date) in enumerate(page_data, start = start_idx + 1):
+        display_date = date[:16] if date else '---'
+        text += f'{idx}. <code>{display_date}</code> - <b>{amount:.0f} р.</b> ({category})\n'
+
+    total_sum = sum(exp[1] for exp in expenses)
+    text += f'\n💰 Всего расходов: <b>{total_sum:.0f} р.</b>'
+
+    buttons = []
+    if page > 0:
+        buttons.append(InlineKeyboardButton(text = '⬅️ Назад', callback_data=f'hist_page_{page - 1}'))
+    if page < total_pages - 1:
+        buttons.append(InlineKeyboardButton(text = 'Вперед ➡️', callback_data = f'hist_page_{page + 1}'))
+
+    kb = InlineKeyboardMarkup(inline_keyboard = [buttons]) if buttons else None
+    return text, kb
+
 async def check_limit_expired(user_id):
     limit, limit_days, limit_start = database.get_limit_info(user_id)
     if not limit or not limit_days or not limit_start:
@@ -188,6 +214,28 @@ async def start_handler(message: types.Message):
     await message.answer_sticker(sticker='CAACAgIAAxkBAAERHn5p7ctbAAFvtBXPLGvdUnJuMmbP_FIAAvU9AAKW4YlKEbbqPv0lxiw7BA')
     await message.answer(text_start, reply_markup=main_menu, parse_mode='HTML')
 
+@dp.message(F.text == '⏱ История')
+async def show_history(message: types.Message):
+    expenses = database.get_all_expenses(message.from_user.id)
+    if not expenses:
+        await message.answer('У тебя пока нет записанных расходов! 🤷‍♂️')
+        return
+    text, kb = get_history_pagination(expenses, page = 0)
+    await message.answer(text,reply_markup = kb, parse_mode = 'HTML')
+@dp.callback_query(F.data.startswith('hist_page_'))
+async def process_history_page(callback: types.CallbackQuery):
+    page = int(callback.data.split('_')[2])
+    expenses = database.get_all_expenses(callback.from_user.id)
+
+    if not expenses:
+        await callback.answer('Данные не найдены ❌')
+        return
+    text, kb = get_history_pagination(expenses, page = page)
+
+    try:
+        await callback.message.edit_text(text, reply_markup = kb, parse_mode = 'HTML')
+    except Exception:
+        await callback.answer()
 
 @dp.message(F.text == '📊 Статистика')
 async def stats_handler(message: types.Message):
