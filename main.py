@@ -10,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from config import TOKEN
+from datetime import datetime, timedelta, timezone
 import database
 from database import get_total_expenses, get_pinned_msg_id, update_pinned_msg_id
 
@@ -27,6 +28,7 @@ database.init_db()
 
 class LimitForm(StatesGroup):
     waiting_for_limit = State()
+    waiting_for_days = State()
 
 
 # ~~~ АДМИН КОМАНДЫ ~~~
@@ -78,14 +80,16 @@ async def cmd_status(message: types.Message):
 
 async def update_pinned_message(user_id):
     total_expenses = get_total_expenses(user_id)
-    limit = database.get_monthly_limit(user_id)
+    limit, limit_days, limit_start = database.get_limit_info(user_id)
 
     if limit > 0:
         remaining = limit - total_expenses
+        days_left = get_days_left(limit_start, limit_days)
+        days_str = f'⏳ Осталось дней: {days_left}\n' if days_left is not None else ''
         if remaining >= 0:
-            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено: {total_expenses:.0f} руб.\n✅ Остаток: {remaining:.0f} руб.'
+            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено: {total_expenses:.0f} руб.\n✅ Остаток: {remaining:.0f} руб.\n{days_str}'
         else:
-            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено: {total_expenses:.0f} руб.\n⛔ Перерасход: {abs(remaining):.0f} руб.'
+            limit_line = f'💰 Лимит: {limit:.0f} руб.\n📉 Потрачено: {total_expenses:.0f} руб.\n⛔ Перерасход: {abs(remaining):.0f} руб.\n{days_str}'
     else:
         limit_line = f'📉 Потрачено всего: {total_expenses:.0f} руб.\n💡 Лимит не установлен'
 
@@ -95,20 +99,56 @@ async def update_pinned_message(user_id):
         '\n🔄 Обновлено только что'
     )
 
-    pinned_msg_id = get_pinned_msg_id(user_id)
+    kb_buttons = []
+    if limit > 0:
+        kb_buttons.append([
+            InlineKeyboardButton(text = '✏️ Изменить лимит', callback_data = 'change_limit'),
+            InlineKeyboardButton(text = '🗑 Удалить лимит', callback_data = 'delete_limit')
+        ])
+    else:
+        kb_buttons.append([
+            InlineKeyboardButton(text = '💰 Установить лимит', callback_data = 'set_limit_pin')
+        ])
+    kb = InlineKeyboardMarkup(inline_keyboard = kb_buttons)
 
+    pinned_msg_id = get_pinned_msg_id(user_id)
     if pinned_msg_id:
         try:
-            await bot.edit_message_text(chat_id=user_id, message_id=pinned_msg_id, text=text_pin, parse_mode='HTML')
+            await bot.edit_message_text(chat_id=user_id, message_id=pinned_msg_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
             return
         except Exception:
             pass
     try:
-        new_msg = await bot.send_message(chat_id=user_id, text=text_pin, parse_mode='HTML')
+        new_msg = await bot.send_message(chat_id=user_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
         await bot.pin_chat_message(chat_id=user_id, message_id=new_msg.message_id, disable_notification=True)
         update_pinned_msg_id(user_id, new_msg.message_id)
     except Exception as e:
         print(f'Ошибка закрепа: {e}')
+
+def get_days_left(limit_start_str, limit_days):
+    if not limit_start_str or not limit_days:
+        return None
+    start = datetime.strptime(limit_start_str, '%Y-%m-%d %H:%M:%S')
+    end = start + timedelta(days = limit_days)
+    now = datetime.now(timezone.utc).replace(tzinfo = None) + timedelta(hours = 3)
+    delta = end - now
+    return max(0, delta.days)
+
+async def check_limit_expired(user_id):
+    limit, limit_days, limit_start = database.get_limit_info(user_id)
+    if not limit or not limit_days or not limit_start:
+        return
+    days_left = get_days_left(limit_start, limit_days)
+    if days_left == 0:
+        kb = InlineKeyboardMarkup(inline_keyboard = [[
+            InlineKeyboardButton(text = f'✅ Продлить на {limit_days} дн.', callback_data = f'renew_limit_{limit_days}'),
+            InlineKeyboardButton(text = '❌ Не продлевать', callback_data = 'delete_limit')
+        ]])
+        await bot.send_message(
+            chat_id = user_id,
+            text = f'⏰ <b>Лимит истёк!</b>\n\nПериод {limit_days} дн. завершён.\n💰 Лимит был: <code>{limit:.0f}</code> руб.\n\nПродлить на тот же срок?',
+            reply_markup = kb, parse_mode = 'HTML'
+        )
 
 
 # ~~~ ГЛАВНОЕ МЕНЮ ~~~
@@ -142,6 +182,7 @@ main_menu = ReplyKeyboardMarkup(
 async def start_handler(message: types.Message):
     await message.answer_sticker(sticker='CAACAgIAAxkBAAERHn5p7ctbAAFvtBXPLGvdUnJuMmbP_FIAAvU9AAKW4YlKEbbqPv0lxiw7BA')
     await message.answer(text_start, reply_markup=main_menu, parse_mode='HTML')
+    await update_pinned_message(message.from_user.id)
 
 
 @dp.message(F.text == '📊 Статистика')
@@ -204,6 +245,76 @@ async def process_limit(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer('⚠ Введи просто число, например: <code>15000</code>', parse_mode='HTML')
 
+def limit_days_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard = [
+        [
+            InlineKeyboardButton(text = '7 дней', callback_data = 'days_7'),
+            InlineKeyboardButton(text = '14 дней', callback_data = 'days_14'),
+            InlineKeyboardButton(text = '30 дней', callback_data = 'days_30'),
+        ],
+        [InlineKeyboardButton(text = '❌ Отмена', callback_data = 'cancel_limit')]
+    ])
+
+async def ask_limit_amount(message_or_callback, state):
+    await state.set_state(LimitForm.waiting_for_limit)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text = '❌ Отмена', callback_data = 'cancel_limit'),]])
+    text = '💰 Введи сумму лимита в рублях:\n<i>Например: <code>15000</code></i>'
+    if isinstance(message_or_callback, types.Message):
+        await message_or_callback.answer(text, parse_mode = 'HTML', reply_markup = kb)
+    else:
+        await message_or_callback.message.edit_text(text, parse_mode = 'HTML', reply_markup = kb)
+
+@dp.message(F.text == '💰 Установить лимит')
+async def set_limit_handler(message, state):
+    await ask_limit_amount(message, state)
+
+@dp.callback_query(F.data == 'set_limit_pin')
+async def set_limit_from_pin(callback, state):
+    await ask_limit_amount(callback, state)
+
+@dp.callback_query(F.data == 'change_limit')
+async def change_limit(callback, state):
+    await ask_limit_amount(callback, state)
+
+@dp.message(LimitForm.waiting_for_limit)
+async def process_limit_amount(message, state):
+    try:
+        limit = float(message.text.replace(',', '.'))
+        if limit <= 0:
+            await message.answer('⚠ Лимит должен быть больше нуля. Попробуй ещё раз:')
+            return
+        await state.update_data(limit_amount = limit)
+        await state.set_state(LimitForm.waiting_for_days)
+        await message.answer(f'✅ Сумма <code>{limit:.0f}</code> руб. принята.\n\n⏳ Теперь выбери срок лимита:', parse_mode='HTML', reply_markup = limit_days_keyboard())
+    except ValueError:
+        await message.answer('⚠ Введи просто число, например: <code>15000</code>', parse_mode = 'HTML')
+
+@dp.callback_query(F.data.startswith('days_'))
+async def process_limit_days(callback, state):
+    if await state.get_state() != LimitForm.waiting_for_days:
+        return
+    days = int(callback.data.split('_')[1])
+    data = await state.get_data()
+    database.set_limit_with_period(callback.from_user.id, data['limit_amount'], days)
+    await state.clear()
+    await callback.message.edit_text(f'✅ <b>Лимит установлен!</b>\n💰 Сумма: <code>{data["limit_amount"]:.0f}</code> руб.\n⏳ Срок: <code>{days}</code> дней', parse_mode = 'HTML')
+    await update_pinned_message(callback.from_user.id)
+
+@dp.callback_query(F.data.startswith('renew_limit_'))
+async def renew_limit(callback):
+    days = int(callback.data.split('_')[2])
+    limit, _, _ = database.get_limit_info(callback.from_user.id)
+    database.set_limit_with_period(callback.from_user.id, limit, days)
+    await callback.message.edit_text(f'✅ <b>Лимит продлён!</b>\n💰 Сумма: <code>{limit:.0f}</code> руб.\n⏳ Срок: <code>{days}</code> дней', parse_mode = 'HTML')
+    await update_pinned_message(callback.from_user.id)
+
+@dp.callback_query(F.data == 'delete_limit')
+async def delete_limit_handler(callback):
+    database.delete_limit(callback.from_user.id)
+    await callback.answer('Лимит удалён')
+    await callback.message.edit_text('🗑 Лимит удалён')
+    await update_pinned_message(callback.from_user.id)
+
 
 # ~~~ УДАЛЕНИЕ ~~~
 
@@ -265,7 +376,7 @@ async def message_handler(message: types.Message):
         database.add_expense(message.from_user.id, amount, category)
 
         # Проверка лимита
-        limit = database.get_monthly_limit(message.from_user.id)
+        limit, limit_days, limit_start = database.get_limit_info(message.from_user.id)
         if limit > 0:
             total = database.get_total_expenses(message.from_user.id)
             remaining = limit - total
@@ -282,6 +393,7 @@ async def message_handler(message: types.Message):
         )
 
         await update_pinned_message(message.from_user.id)
+        await check_limit_expired(message.from_user.id)
 
     except (ValueError, IndexError):
         await message.answer(

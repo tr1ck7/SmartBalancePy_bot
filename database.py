@@ -19,9 +19,17 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             monthly_limit REAL DEFAULT 0,
-            pinned_msg_id INTEGER DEFAULT NULL
+            pinned_msg_id INTEGER DEFAULT NULL,
+            limit_days INTEGER DEFAULT NULL,
+            limit_start TIMESTAMP DEFAULT NULL
         )
     ''')
+
+    for col, definition in [('limit_days', 'INTEGER DEFAULT NULL'), ('limit_start', 'TIMESTAMP DEFAULT NULL')]:
+        try:
+            cursor.execute(f'ALTER TABLE users ADD COLUMN {col} {definition}')
+        except sqlite3.OperationalError:
+            pass
 
     conn.commit()
     conn.close()
@@ -49,6 +57,46 @@ def get_total_expenses(user_id):
     return total or 0.0
 
 
+def set_limit_with_period(user_id, limit_amount, days):
+    from datetime import datetime, timezone, timedelta
+    conn = sqlite3.connect('finance.db')
+    cursor = conn.cursor()
+    start = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime('%Y-%m-%d %H:%M:%S')
+    cursor.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
+    if not cursor.fetchone():
+        cursor.execute(
+            'INSERT INTO users (user_id, monthly_limit, limit_days, limit_start) VALUES (?, ?, ?, ?)',
+            (user_id, limit_amount, days, start)
+        )
+    else:
+        cursor.execute(
+            'UPDATE users SET monthly_limit = ?, limit_days = ?, limit_start = ? WHERE user_id = ?',
+            (limit_amount, days, start, user_id)
+        )
+    conn.commit()
+    conn.close()
+
+def get_limit_info(user_id):
+    conn = sqlite3.connect('finance.db')
+    cursor = conn.cursor()
+    cursor.execute(
+        'SELECT monthly_limit, limit_days, limit_start FROM users WHERE user_id = ?',
+        (user_id,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row if row else (0.0, None, None)
+
+def delete_limit(user_id):
+    conn = sqlite3.connect('finance.db')
+    cursor = conn.cursor()
+    cursor.execute(
+        'UPDATE users SET monthly_limit = 0, limit_days = NULL, limit_start = NULL WHERE user_id = ?',
+        (user_id,)
+    )
+    conn.commit()
+    conn.close()
+
 def update_monthly_limit(user_id, limit_amount):
     conn = sqlite3.connect('finance.db')
     cursor = conn.cursor()
@@ -65,16 +113,6 @@ def update_monthly_limit(user_id, limit_amount):
         )
     conn.commit()
     conn.close()
-
-
-def get_monthly_limit(user_id):
-    conn = sqlite3.connect('finance.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT monthly_limit FROM users WHERE user_id = ?', (user_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return row[0] if row else 0.0
-
 
 def get_pinned_msg_id(user_id):
     conn = sqlite3.connect('finance.db')
