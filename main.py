@@ -181,7 +181,6 @@ main_menu = ReplyKeyboardMarkup(
 async def start_handler(message: types.Message):
     await message.answer_sticker(sticker='CAACAgIAAxkBAAERHn5p7ctbAAFvtBXPLGvdUnJuMmbP_FIAAvU9AAKW4YlKEbbqPv0lxiw7BA')
     await message.answer(text_start, reply_markup=main_menu, parse_mode='HTML')
-    await update_pinned_message(message.from_user.id)
 
 
 @dp.message(F.text == '📊 Статистика')
