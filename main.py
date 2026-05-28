@@ -127,7 +127,7 @@ async def update_pinned_message(user_id):
                 if 'message is not modified' not in str(e).lower():
                     raise e
             try:
-                await bot.pin_chat_message(chat_id=user_id, message_id=pinned_msg_id, disable_notification=True)
+                await bot.pin_chat_message(chat_id=user_id, message_id=pinned_msg_id, disable_notification=True, both_sides = True)
             except Exception:
                 pass
 
@@ -140,7 +140,7 @@ async def update_pinned_message(user_id):
     if not success:
         try:
             new_msg = await bot.send_message(chat_id=user_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
-            await bot.pin_chat_message(chat_id=user_id, message_id=new_msg.message_id, disable_notification=True)
+            await bot.pin_chat_message(chat_id=user_id, message_id=new_msg.message_id, disable_notification=True, both_sides = True)
             update_pinned_msg_id(user_id, new_msg.message_id)
         except Exception as e:
             print(f'Ошибка закрепа: {e}')
