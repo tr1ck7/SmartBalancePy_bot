@@ -138,7 +138,7 @@ async def update_pinned_message(user_id):
         try:
             new_msg = await bot.send_message(chat_id=user_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
             await bot.pin_chat_message(chat_id=user_id, message_id=new_msg.message_id, disable_notification=True)
-            update_pinned_msg_id(user_id, new_msg.message_id)
+            database.update_pinned_msg_id(user_id, new_msg.message_id)
         except Exception as e:
             print(f'Ошибка закрепа: {e}')
 
