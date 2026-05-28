@@ -268,12 +268,6 @@ async def stats_handler(message: types.Message):
         await message.answer('У вас еще нет записей! 🤷‍♂️')
         return
 
-    total = sum(exp[1] for exp in expenses)
-    await message.answer(
-        f'<b>📊 Твоя статистика</b>\n├Общая сумма: <code>{total}</code> руб.\n└Записей: <code>{len(expenses)}</code>',
-        parse_mode='HTML'
-    )
-
 @dp.callback_query(F.data.startswith('stats_'))
 async def stats_period_process(callback: types.CallbackQuery):
     period = callback.data.split('_')[1]
