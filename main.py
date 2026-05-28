@@ -125,8 +125,15 @@ async def update_pinned_message(user_id):
             await bot.edit_message_text(chat_id=user_id, message_id=pinned_msg_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
             await bot.pin_chat_message(chat_id=user_id, message_id=pinned_msg_id, disable_notification=True)
             success = True
-        except Exception:
-            success = False
+        except Exception as e:
+            if 'message is not modified' in str(e).lower():
+                try:
+                    await bot.pin_chat_message(chat_id=user_id, message_id=pinned_msg_id, disable_notification=True)
+                except Exception:
+                    pass
+                success = True
+            else:
+                success = False
     if not success:
         try:
             new_msg = await bot.send_message(chat_id=user_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
