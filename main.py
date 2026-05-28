@@ -337,7 +337,7 @@ async def stats_period_process(callback: types.CallbackQuery):
 
     await callback.message.edit_text(text, reply_markup = kb, parse_mode = 'HTML')
 
-@dp.callback_query(text='stats_back')
+@dp.callback_query(F.data == 'stats_back')
 async def stats_back(callback: types.CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard = [
         [
