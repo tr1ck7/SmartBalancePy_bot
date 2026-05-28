@@ -268,6 +268,20 @@ async def stats_handler(message: types.Message):
         await message.answer('У вас еще нет записей! 🤷‍♂️')
         return
 
+@dp.callback_query(F.data == 'stats_back')
+async def stats_back(callback: types.CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard = [
+        [
+            InlineKeyboardButton(text='📅 За сегодня', callback_data='stats_today'),
+            InlineKeyboardButton(text='📅 За 7 дней', callback_data='stats_7days')
+        ],
+        [
+            InlineKeyboardButton(text='📅 За 30 дней', callback_data='stats_30days'),
+            InlineKeyboardButton(text='📊 За всё время', callback_data='stats_all')
+        ]
+    ])
+    await callback.message.edit_text('📊 <b>Выбери период для анализа трат:</b>', reply_markup = kb, parse_mode='HTML')
+
 @dp.callback_query(F.data.startswith('stats_'))
 async def stats_period_process(callback: types.CallbackQuery):
     period = callback.data.split('_')[1]
@@ -330,20 +344,6 @@ async def stats_period_process(callback: types.CallbackQuery):
     ]])
 
     await callback.message.edit_text(text, reply_markup = kb, parse_mode = 'HTML')
-
-@dp.callback_query(F.data == 'stats_back')
-async def stats_back(callback: types.CallbackQuery):
-    kb = InlineKeyboardMarkup(inline_keyboard = [
-        [
-            InlineKeyboardButton(text='📅 За сегодня', callback_data='stats_today'),
-            InlineKeyboardButton(text='📅 За 7 дней', callback_data='stats_7days')
-        ],
-        [
-            InlineKeyboardButton(text='📅 За 30 дней', callback_data='stats_30days'),
-            InlineKeyboardButton(text='📊 За всё время', callback_data='stats_all')
-        ]
-    ])
-    await callback.message.edit_text('📊 <b>Выбери период для анализа трат:</b>', reply_markup = kb, parse_mode='HTML')
 
 @dp.message(F.text == '⚙ Помощь')
 async def help_handler(message: types.Message):
