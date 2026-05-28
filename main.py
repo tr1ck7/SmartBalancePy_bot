@@ -287,6 +287,12 @@ async def set_limit_handler(message: types.Message, state: FSMContext):
 async def set_limit_from_pin(callback: types.CallbackQuery, state: FSMContext):
     await ask_limit_amount(callback, state)
 
+@dp.callback_query(F.data == 'cancel_limit')
+async def cancel_limit_process(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text('Установка лимита отменена 🤝')
+    await callback.answer()
+
 @dp.callback_query(F.data == 'change_limit')
 async def change_limit(callback: types.CallbackQuery, state: FSMContext):
     await ask_limit_amount(callback, state)
