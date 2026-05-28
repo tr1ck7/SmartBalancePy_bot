@@ -4,14 +4,17 @@ import asyncio
 from aiogram.client.session.aiohttp import AiohttpSession
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
+from aiogram.filters import Command, callback_data
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+from pandas.core.indexes import category
+
 from config import TOKEN
 from datetime import datetime, timedelta, timezone
 import database
+from database import get_total_expenses, get_pinned_msg_id, update_pinned_msg_id
 
 # Инициализация бота
 load_dotenv()
@@ -116,7 +119,7 @@ async def update_pinned_message(user_id):
         ])
     kb = InlineKeyboardMarkup(inline_keyboard = kb_buttons)
 
-    pinned_msg_id = database.get_pinned_msg_id(user_id)
+    pinned_msg_id = get_pinned_msg_id(user_id)
 
     success = False
     if pinned_msg_id:
@@ -137,7 +140,7 @@ async def update_pinned_message(user_id):
         try:
             new_msg = await bot.send_message(chat_id=user_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
             await bot.pin_chat_message(chat_id=user_id, message_id=new_msg.message_id, disable_notification=True)
-            database.update_pinned_msg_id(user_id, new_msg.message_id)
+            update_pinned_msg_id(user_id, new_msg.message_id)
         except Exception as e:
             print(f'Ошибка закрепа: {e}')
 
@@ -250,6 +253,18 @@ async def process_history_page(callback: types.CallbackQuery):
 
 @dp.message(F.text == '📊 Статистика')
 async def stats_handler(message: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard = [
+        [
+            InlineKeyboardButton(text = '📅 За сегодня', callback_data = 'stats_today'),
+            InlineKeyboardButton(text = '📅 За 7 дней', callback_data = 'stats_7days')
+        ],
+        [
+            InlineKeyboardButton(text = '📅 За 30 дней', callback_data = 'stats_30days'),
+            InlineKeyboardButton(text = '📊 За всё время', callback_data = 'stats_all')
+        ]
+    ])
+
+    await message.answer('📊 <b>Выбери период для анализа трат:</b>', reply_markup = kb, parse_mode = 'HTML')
     expenses = database.get_all_expenses(message.from_user.id)
     if not expenses:
         await message.answer('У вас еще нет записей! 🤷‍♂️')
@@ -261,6 +276,82 @@ async def stats_handler(message: types.Message):
         parse_mode='HTML'
     )
 
+@dp.callback_query(F.data.startswith('stats_'))
+async def stats_period_process(callback: types.CallbackQuery):
+    period = callback.data.split('_')[1]
+    user_id = callback.from_user.id
+
+    expenses = database.get_all_expenses(user_id)
+
+    if not expenses:
+        await callback.answer('У вас еще нет записей! 🤷‍♂️', show_alert = True)
+        return
+
+    now = datetime.now(timezone.utc).replace(tzinfo = None) + timedelta(hours = 3)
+    start_date = None
+    title = ''
+
+    if period == 'today':
+        start_date = now.replace(hour = 0, minute = 0, second = 0, microsecond = 0)
+        title = 'за сегодня'
+    elif period == '7days':
+        start_date = now - timedelta(days=7)
+        title = 'за 7 дней'
+    elif period == '30days':
+        start_date = now - timedelta(days=30)
+        title = 'за 30 дней'
+    else:
+        title = 'за всё время'
+
+    category_totals = {}
+    total_sum = 0.0
+    count = 0
+
+    for exp_id, amount, category, date_str in expenses:
+        exp_date = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+
+        if start_date and exp_date < start_date:
+            continue
+
+        category_totals[category] = category_totals.get(category, 0) + amount
+        total_sum += amount
+        count += 1
+
+    if count == 0:
+        await callback.answer('За этот период трат не найдено 🫙', show_alert = True)
+        return
+
+    text = f'📊 <b>Статистика {title}:</b>\n'
+    text += f'💰 Всего: <code>{total_sum:.0f}</code> руб.\n'
+    text += f'📝 Записей: <code>{count}</code>\n'
+    text += '───────────────────\n'
+
+    sorted_cats = sorted(category_totals.items(), key = lambda x: x[1], reverse = True)
+
+    for cat, amt in sorted_cats:
+        percentage = (amt / total_sum) * 100
+        bar = '🟩' * max(1, round(percentage / 20))
+        text += f'▪️ {cat}: <b>{amt:.0f}</b> р. ({percentage:.1f}%)\n{bar}\n'
+
+    kb = InlineKeyboardMarkup(inline_keyboard = [[
+        InlineKeyboardButton(text = '⬅️ Назад к периодам', callback_data = 'stats_back')
+    ]])
+
+    await callback.message.edit_text(text, reply_markup = kb, parse_mode = 'HTML')
+
+@dp.callback_query(text='stats_back')
+async def stats_back(callback: types.CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard = [
+        [
+            InlineKeyboardButton(text='📅 За сегодня', callback_data='stats_today'),
+            InlineKeyboardButton(text='📅 За 7 дней', callback_data='stats_7days')
+        ],
+        [
+            InlineKeyboardButton(text='📅 За 30 дней', callback_data='stats_30days'),
+            InlineKeyboardButton(text='📊 За всё время', callback_data='stats_all')
+        ]
+    ])
+    await callback.message.edit_text('📊 <b>Выбери период для анализа трат:</b>', reply_markup = kb, parse_mode='HTML')
 
 @dp.message(F.text == '⚙ Помощь')
 async def help_handler(message: types.Message):
