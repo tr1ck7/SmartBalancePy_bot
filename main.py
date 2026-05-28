@@ -9,8 +9,6 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeybo
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from pandas.core.indexes import category
-
 from config import TOKEN
 from datetime import datetime, timedelta, timezone
 import database
