@@ -118,22 +118,25 @@ async def update_pinned_message(user_id):
     kb = InlineKeyboardMarkup(inline_keyboard = kb_buttons)
 
     pinned_msg_id = get_pinned_msg_id(user_id)
-
     success = False
     if pinned_msg_id:
         try:
-            await bot.edit_message_text(chat_id=user_id, message_id=pinned_msg_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
-            await bot.pin_chat_message(chat_id=user_id, message_id=pinned_msg_id, disable_notification=True)
+            try:
+                await bot.edit_message_text(chat_id=user_id, message_id=pinned_msg_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
+            except Exception as e:
+                if 'message is not modified' not in str(e).lower():
+                    raise e
+            try:
+                await bot.pin_chat_message(chat_id=user_id, message_id=pinned_msg_id, disable_notification=True)
+            except Exception:
+                pass
+
             success = True
+
         except Exception as e:
-            if 'message is not modified' in str(e).lower():
-                try:
-                    await bot.pin_chat_message(chat_id=user_id, message_id=pinned_msg_id, disable_notification=True)
-                except Exception:
-                    pass
-                success = True
-            else:
-                success = False
+            print(f'Старый закреп (ID: {pinned_msg_id}) больше не доступен: {e}')
+            success = False
+
     if not success:
         try:
             new_msg = await bot.send_message(chat_id=user_id, text=text_pin, reply_markup=kb, parse_mode='HTML')
@@ -259,6 +262,9 @@ async def stats_handler(message: types.Message):
         [
             InlineKeyboardButton(text = '📅 За 30 дней', callback_data = 'stats_30days'),
             InlineKeyboardButton(text = '📊 За всё время', callback_data = 'stats_all')
+        ],
+        [
+            InlineKeyboardButton(text='🏠 В главное меню', callback_data='stats_close')
         ]
     ])
 
@@ -278,9 +284,17 @@ async def stats_back(callback: types.CallbackQuery):
         [
             InlineKeyboardButton(text='📅 За 30 дней', callback_data='stats_30days'),
             InlineKeyboardButton(text='📊 За всё время', callback_data='stats_all')
+        ],
+        [
+            InlineKeyboardButton(text='🏠 В главное меню', callback_data='stats_close')
         ]
     ])
     await callback.message.edit_text('📊 <b>Выбери период для анализа трат:</b>', reply_markup = kb, parse_mode='HTML')
+
+@dp.callback_query(F.data == 'stats_close')
+async def stats_close(callback: types.CallbackQuery):
+    await callback.message.delete()
+    await callback.answer()
 
 @dp.callback_query(F.data.startswith('stats_'))
 async def stats_period_process(callback: types.CallbackQuery):
