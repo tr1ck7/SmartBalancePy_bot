@@ -12,7 +12,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from config import TOKEN
 from datetime import datetime, timedelta, timezone
 import database
-from database import get_total_expenses, get_pinned_msg_id, update_pinned_msg_id
 
 # Инициализация бота
 load_dotenv()
@@ -117,7 +116,7 @@ async def update_pinned_message(user_id):
         ])
     kb = InlineKeyboardMarkup(inline_keyboard = kb_buttons)
 
-    pinned_msg_id = get_pinned_msg_id(user_id)
+    pinned_msg_id = database.get_pinned_msg_id(user_id)
 
     success = False
     if pinned_msg_id:
